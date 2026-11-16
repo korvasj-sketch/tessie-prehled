@@ -287,7 +287,13 @@ const TZ = "Europe/Prague";
 // token: config.js (soubor vedle stránky) > uložený v prohlížeči > prázdné
 const CFG = window.TESSIE_CONFIG || {};
 const CFG_TOKEN = String(CFG.token || "").trim();
-let token = CFG_TOKEN || localStorage.getItem("tessie_token") || "";
+// localStorage nemusí být z file:// povolen — proto přes bezpečnou obálku
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { localStorage.removeItem(k); } catch (e) {} }
+};
+let token = CFG_TOKEN || store.get("tessie_token") || "";
 let allCharges = [];      // všechna nabíjení z aktuálního načtení (období)
 let allDrives = [];       // všechny jízdy za stejné období
 let rawSummary = [];      // poslední vygenerovaný souhrn pro CSV
@@ -370,7 +376,7 @@ async function loadVehicles() {
       o.textContent = (car ? name + " (" + car + ")" : name) + " — " + v.vin;
       sel.appendChild(o);
     });
-    const saved = localStorage.getItem("tessie_vin");
+    const saved = store.get("tessie_vin");
     if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
     setStatus(st, "Připojeno ✓ (" + list.length + " vozidlo) · token z " +
       (CFG_TOKEN ? "config.js" : "prohlížeče"), "ok");
@@ -431,7 +437,7 @@ async function load() {
   $("load").disabled = true;
   try {
     allCharges = await fetchCharges(vin, fromTs, toTs);
-    localStorage.setItem("tessie_vin", vin);
+    store.set("tessie_vin", vin);
 
     let driveErr = "";
     try {
@@ -854,7 +860,7 @@ function exportDrivesExcel() {
 $("saveToken").addEventListener("click", () => {
   token = $("token").value.trim();
   if (!token) { setStatus($("tokenStatus"), "Vlož token.", "err"); return; }
-  localStorage.setItem("tessie_token", token);
+  store.set("tessie_token", token);
   loadVehicles();
 });
 $("toggleToken").addEventListener("click", () => {
