@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tessie — přehled nabíjení</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+    --txt:#e6edf3; --muted:#8b98a5; --accent:#3fb950; --accent2:#58a6ff;
+    --warn:#d29922; --danger:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  header{padding:28px 20px 6px; max-width:1100px; margin:0 auto}
+  h1{margin:0; font-size:26px; letter-spacing:.2px}
+  h1 .zap{color:var(--accent)}
+  .sub{margin:6px 0 0; color:var(--muted)}
+  main{max-width:1100px; margin:0 auto; padding:16px 20px 60px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px; margin-top:16px;
+  }
+  h2{margin:0 0 12px; font-size:16px; color:var(--accent2); font-weight:600}
+  label{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; text-transform:uppercase; letter-spacing:.4px}
+  input,select,button{
+    font:inherit; color:var(--txt); background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--accent2)}
+  input[type=date]{min-width:150px}
+  #token{width:100%; max-width:560px; font-family:ui-monospace,Consolas,monospace}
+  .row{display:flex; flex-wrap:wrap; gap:14px}
+  .row>div{flex:1 1 190px; min-width:170px}
+  button{cursor:pointer; transition:.15s; font-weight:600}
+  button:hover{border-color:var(--accent2)}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#04170a}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent}
+  .btnline{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px}
+  .presets{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+  .presets button{padding:6px 10px; font-size:13px; font-weight:500}
+  .hint{font-size:13px; color:var(--muted); margin-top:8px}
+  .ok{color:var(--accent)} .err{color:var(--danger)} .info{color:var(--warn)}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-top:16px}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px}
+  .kpi .k{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px}
+  .kpi .v{font-size:28px; font-weight:700; margin-top:6px}
+  .kpi .v small{font-size:14px; font-weight:500; color:var(--muted)}
+  .kpi .d{font-size:12px; color:var(--muted); margin-top:4px}
+  .tablewrap{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{padding:9px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap}
+  th{color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.4px; position:sticky; top:0; background:var(--panel)}
+  td.loc{white-space:normal; min-width:230px}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  tfoot td{font-weight:700; border-top:2px solid var(--line)}
+  .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600}
+  .badge.sc{background:#3d1d1f; color:#ff7b72}
+  .badge.fast{background:#3a2e12; color:#e3b341}
+  .badge.ac{background:#12261a; color:#56d364}
+  #status{font-size:14px}
+  .muted{color:var(--muted)}
+  footer{max-width:1100px; margin:0 auto; padding:0 20px 40px; color:var(--muted); font-size:13px}
+  code{background:var(--panel2); padding:1px 6px; border-radius:6px; font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="zap">⚡</span> Tessie — přehled nabíjení</h1>
+  <p class="sub">Kolik kWh jsi nabil, kde a za kolik — podle data a místa nabíjení.</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1 · Připojení</h2>
+    <label>Přístupový token</label>
+    <input type="password" id="token" placeholder="vlož token z Tessie → Developer settings → Generate Access Token" autocomplete="off">
+    <div class="btnline">
+      <button class="primary" id="saveToken">Uložit a načíst vozidla</button>
+      <button class="ghost" id="toggleToken" title="Ukázat/skrýt token">👁</button>
+      <span id="tokenStatus" class="hint"></span>
+    </div>
+    <label>Vozidlo</label>
+    <select id="vehicle" style="max-width:560px; width:100%"><option value="">— nejdřív ulož token —</option></select>
+    <p class="hint">Token zůstává jen ve tvém prohlížeči (localStorage). Nikam se neodesílá, do kódu se nepíše.</p>
+  </section>
+
+  <section class="card">
+    <h2>2 · Filtry</h2>
+    <div class="row">
+      <div>
+        <label>Od</label>
+        <input type="date" id="from">
+      </div>
+      <div>
+        <label>Do</label>
+        <input type="date" id="to">
+      </div>
+      <div>
+        <label>Místo nabíjení</label>
+        <select id="place"><option value="">Všechna místa</option></select>
+      </div>
+      <div>
+        <label>Typ nabíjení</label>
+        <select id="kind">
+          <option value="">Vše</option>
+          <option value="sc">Jen Superchargery</option>
+          <option value="nosc">Bez Superchargerů</option>
+        </select>
+      </div>
+    </div>
+    <div class="presets">
+      <button data-p="7">Posledních 7 dní</button>
+      <button data-p="30">Posledních 30 dní</button>
+      <button data-p="month">Tento měsíc</button>
+      <button data-p="year">Tento rok</button>
+      <button data-p="all">Vše</button>
+    </div>
+    <div class="btnline">
+      <button class="primary" id="load">Načíst data</button>
+      <span id="status"></span>
+    </div>
+  </section>
+
+  <div id="results" hidden>
+    <div class="cards">
+      <div class="kpi">
+        <div class="k">Nabitá energie</div>
+        <div class="v" id="kpiAdded">–</div>
+        <div class="d" id="kpiAddedD"></div>
+      </div>
+      <div class="kpi">
+        <div class="k">Spotřeba</div>
+        <div class="v" id="kpiUsed">–</div>
+        <div class="d">dle Tessie, za stejné období</div>
+      </div>
+      <div class="kpi">
+        <div class="k">Počet nabíjení</div>
+        <div class="v" id="kpiCount">–</div>
+        <div class="d" id="kpiCountD"></div>
+      </div>
+      <div class="kpi">
+        <div class="k">Náklady</div>
+        <div class="v" id="kpiCost">–</div>
+        <div class="d">hodnota dle Tessie</div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>3 · Souhrn podle místa</h2>
+      <div class="tablewrap">
+        <table id="summary">
+          <thead>
+            <tr>
+              <th>Místo</th>
+              <th class="num">Nabíjení</th>
+              <th class="num">Nabito kWh</th>
+              <th class="num">Průměr kWh</th>
+              <th class="num">Spotřeba kWh</th>
+              <th class="num">Náklady</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <p class="hint" id="summaryNote"></p>
+    </section>
+
+    <section class="card">
+      <h2>4 · Jednotlivá nabíjení</h2>
+      <div class="btnline" style="margin-top:0; margin-bottom:12px">
+        <button class="primary" id="xlsx">⬇ Export do Excelu (.xlsx)</button>
+        <button class="ghost" id="csvDetail">CSV detail</button>
+        <button class="ghost" id="csvSummary">CSV souhrn</button>
+        <span class="hint" id="detailNote"></span>
+        <span class="hint" id="exportInfo" style="width:100%"></span>
+      </div>
+      <div class="tablewrap">
+        <table id="detail">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Místo</th>
+              <th>Typ</th>
+              <th class="num">Nabito kWh</th>
+              <th class="num">Spotřeba kWh</th>
+              <th class="num">Baterie</th>
+              <th class="num">Náklady</th>
+              <th class="num">Odometr km</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>5 · Kniha jízd</h2>
+      <div class="row">
+        <div>
+          <label>Místo (start nebo cíl)</label>
+          <select id="dplace"><option value="">Všechna místa</option></select>
+        </div>
+        <div>
+          <label>Štítek jízdy</label>
+          <select id="dtag"><option value="">Všechny štítky</option></select>
+        </div>
+      </div>
+
+      <div class="cards" style="margin-top:16px">
+        <div class="kpi">
+          <div class="k">Ujetá vzdálenost</div>
+          <div class="v" id="kpiDist">–</div>
+          <div class="d" id="kpiDistD"></div>
+        </div>
+        <div class="kpi">
+          <div class="k">Spotřeba při jízdě</div>
+          <div class="v" id="kpiDriveUsed">–</div>
+          <div class="d" id="kpiDriveUsedD"></div>
+        </div>
+        <div class="kpi">
+          <div class="k">Počet jízd</div>
+          <div class="v" id="kpiDriveCount">–</div>
+          <div class="d" id="kpiDriveCountD"></div>
+        </div>
+        <div class="kpi">
+          <div class="k">Čas za volantem</div>
+          <div class="v" id="kpiDriveTime">–</div>
+          <div class="d">součet délek jízd</div>
+        </div>
+      </div>
+
+      <div class="btnline">
+        <button class="primary" id="xlsxDrives">⬇ Export do Excelu (.xlsx)</button>
+        <button class="ghost" id="csvDrives">CSV jízd</button>
+        <span class="hint" id="drivesNote"></span>
+        <span class="hint" id="drivesExportInfo" style="width:100%"></span>
+      </div>
+
+      <div class="tablewrap">
+        <table id="drives">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Odkud</th>
+              <th>Kam</th>
+              <th class="num">Vzdálenost km</th>
+              <th class="num">Spotřeba kWh</th>
+              <th class="num">Prům. rychlost</th>
+              <th class="num">Doba</th>
+              <th class="num">Baterie</th>
+              <th>Štítek</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<footer>
+  Data: <a href="https://developer.tessie.com" style="color:var(--accent2)">Tessie API</a> ·
+  nabíjení se filtrovává podle <code>from</code>/<code>to</code> a místa ·
+  stránka neukládá token nikam než do svého vlastního prohlížeče.
+</footer>
+
+<!-- konfigurace (token) — soubor config.js je volitelný, do repozitáře se nenahrává -->
+<script src="config.js"></script>
+<!-- knihovna pro generovani .xlsx (kdyby CDN chybela, export prepne na CSV) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+"use strict";
+const API = "https://api.tessie.com";
+const $ = id => document.getElementById(id);
+const TZ = "Europe/Prague";
+
+// token: config.js (soubor vedle stránky) > uložený v prohlížeči > prázdné
+const CFG = window.TESSIE_CONFIG || {};
+const CFG_TOKEN = String(CFG.token || "").trim();
+let token = CFG_TOKEN || localStorage.getItem("tessie_token") || "";
+let allCharges = [];      // všechna nabíjení z aktuálního načtení (období)
+let allDrives = [];       // všechny jízdy za stejné období
+let rawSummary = [];      // poslední vygenerovaný souhrn pro CSV
+
+/* ---------- pomocné ---------- */
+const nf1 = new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:1, maximumFractionDigits:1});
+const nf0 = new Intl.NumberFormat("cs-CZ", {maximumFractionDigits:0});
+const nf2 = new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:2, maximumFractionDigits:2});
+const dstr = ts => new Date(ts * 1000).toLocaleString("cs-CZ", {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"});
+const dshort = ts => new Date(ts * 1000).toLocaleDateString("cs-CZ", {day:"2-digit", month:"2-digit", year:"numeric"});
+
+function setStatus(el, text, cls) {
+  el.textContent = text;
+  el.className = cls ? cls : "hint";
+}
+
+async function api(path, params) {
+  const url = new URL(API + path);
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+  });
+  let res;
+  try {
+    res = await fetch(url, {headers: {Authorization: "Bearer " + token}});
+  } catch (e) {
+    throw new Error("Nepodařilo se spojit s Tessie (síť?). Zkontroluj připojení.");
+  }
+  if (res.status === 401) throw new Error("Token je neplatný nebo vypršel — vygeneruj nový v Tessie → Developer settings.");
+  if (res.status === 403) throw new Error("Token nemá oprávnění k těmto datům (HTTP 403).");
+  if (!res.ok) throw new Error("Tessie odpověděla chybou HTTP " + res.status + ".");
+  return res.json();
+}
+
+/* ---------- datum ---------- */
+function tsOf(dateStr, endOfDay) {
+  const d = new Date(dateStr + (endOfDay ? "T23:59:59" : "T00:00:00"));
+  return Math.floor(d.getTime() / 1000);
+}
+function preset(p) {
+  const now = new Date();
+  const iso = d => d.toISOString().slice(0, 10); // pro input; přepočet lokálně níže
+  const local = d => {
+    const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return z.toISOString().slice(0, 10);
+  };
+  let from, to = local(now);
+  if (p === "7" || p === "30") {
+    const d = new Date(now); d.setDate(d.getDate() - (parseInt(p, 10) - 1));
+    from = local(d);
+  } else if (p === "month") {
+    from = local(new Date(now.getFullYear(), now.getMonth(), 1));
+  } else if (p === "year") {
+    from = local(new Date(now.getFullYear(), 0, 1));
+  } else {
+    from = "2019-01-01";
+  }
+  $("from").value = from;
+  $("to").value = to;
+}
+
+/* ---------- načtení ---------- */
+async function loadVehicles() {
+  const st = $("tokenStatus");
+  setStatus(st, "Načítám vozidla…", "info");
+  try {
+    const j = await api("/vehicles");
+    const list = (j.results || []).filter(v => v.is_active !== false);
+    const sel = $("vehicle");
+    sel.innerHTML = "";
+    if (!list.length) {
+      sel.innerHTML = '<option value="">— v účtu není žádné aktivní vozidlo —</option>';
+      setStatus(st, "V účtu jsem nenašel žádné vozidlo.", "err");
+      return;
+    }
+    list.forEach(v => {
+      const o = document.createElement("option");
+      o.value = v.vin;
+      const name = (v.last_state && v.last_state.display_name) || v.plate || v.vin;
+      const car = v.last_state && v.last_state.vehicle_config ? v.last_state.vehicle_config.car_type : "";
+      o.textContent = (car ? name + " (" + car + ")" : name) + " — " + v.vin;
+      sel.appendChild(o);
+    });
+    const saved = localStorage.getItem("tessie_vin");
+    if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+    setStatus(st, "Připojeno ✓ (" + list.length + " vozidlo) · token z " +
+      (CFG_TOKEN ? "config.js" : "prohlížeče"), "ok");
+  } catch (e) {
+    setStatus(st, e.message, "err");
+  }
+}
+
+async function fetchCharges(vin, fromTs, toTs) {
+  let out = [], to = toTs, guard = 0;
+  while (guard++ < 12) {
+    const j = await api("/" + vin + "/charges", {
+      format: "json", distance_format: "km", timezone: TZ,
+      from: fromTs, to: to, limit: 500
+    });
+    const batch = j.results || [];
+    out = out.concat(batch);
+    if (batch.length < 500) break;
+    const oldest = Math.min.apply(null, batch.map(c => c.started_at));
+    if (oldest <= fromTs) break;
+    to = oldest - 1;  // doptáme se hlouběji do minulosti
+  }
+  const seen = new Set();
+  return out.filter(c => !seen.has(c.id) && seen.add(c.id))
+            .sort((a, b) => b.started_at - a.started_at);
+}
+
+async function fetchDrives(vin, fromTs, toTs) {
+  let out = [], to = toTs, guard = 0;
+  while (guard++ < 12) {
+    const j = await api("/" + vin + "/drives", {
+      format: "json", distance_format: "km", temperature_format: "c",
+      from: fromTs, to: to, limit: 500
+    });
+    const batch = j.results || [];
+    out = out.concat(batch);
+    if (batch.length < 500) break;
+    const oldest = Math.min.apply(null, batch.map(d => d.started_at));
+    if (oldest <= fromTs) break;
+    to = oldest - 1;
+  }
+  const seen = new Set();
+  return out.filter(d => !seen.has(d.id) && seen.add(d.id))
+            .sort((a, b) => b.started_at - a.started_at);
+}
+
+async function load() {
+  const st = $("status");
+  if (!token) { setStatus(st, "Nejdřív ulož token.", "err"); return; }
+  const vin = $("vehicle").value;
+  if (!vin) { setStatus(st, "Vyber vozidlo.", "err"); return; }
+  const from = $("from").value, to = $("to").value;
+  if (!from || !to) { setStatus(st, "Vyber období od–do.", "err"); return; }
+  const fromTs = tsOf(from, false), toTs = tsOf(to, true);
+  if (toTs < fromTs) { setStatus(st, "Datum „do“ je před datem „od“.", "err"); return; }
+
+  setStatus(st, "Načítám nabíjení a jízdy z Tessie…", "info");
+  $("load").disabled = true;
+  try {
+    allCharges = await fetchCharges(vin, fromTs, toTs);
+    localStorage.setItem("tessie_vin", vin);
+
+    let driveErr = "";
+    try {
+      allDrives = await fetchDrives(vin, fromTs, toTs);
+    } catch (e) {
+      allDrives = [];
+      driveErr = " Jízdy: " + e.message;
+    }
+
+    buildPlaceFilter();
+    buildDriveFilters();
+    render();
+    renderDrives();
+
+    const head = allCharges.length || allDrives.length
+      ? "Hotovo ✓ " + allCharges.length + " nabíjení a " + allDrives.length + " jízd za období " +
+        dshort(fromTs) + " – " + dshort(toTs)
+      : "Za toto období žádná nabíjení ani jízdy.";
+    setStatus(st, head + driveErr, driveErr ? "info" : "ok");
+  } catch (e) {
+    setStatus(st, e.message, "err");
+    $("results").hidden = true;
+  } finally {
+    $("load").disabled = false;
+  }
+}
+
+/* ---------- filtry a výpočty ---------- */
+function buildPlaceFilter() {
+  const sel = $("place");
+  const prev = sel.value;
+  const counts = {};
+  allCharges.forEach(c => {
+    const l = c.location || "(neznámé místo)";
+    counts[l] = (counts[l] || 0) + 1;
+  });
+  const places = Object.keys(counts)
+    .sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "cs"));
+  sel.innerHTML = '<option value="">Všechna místa</option>';
+  places.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = p + "  (" + counts[p] + "×)";
+    sel.appendChild(o);
+  });
+  if (places.includes(prev)) sel.value = prev;
+}
+
+function kindLabel() {
+  const k = $("kind").value;
+  return k === "sc" ? "jen Superchargery" : k === "nosc" ? "bez Superchargerů" : "vše";
+}
+
+function visibleCharges() {
+  const place = $("place").value;
+  const kind = $("kind").value;
+  return allCharges.filter(c => {
+    const loc = c.location || "(neznámé místo)";
+    if (place && loc !== place) return false;
+    if (kind === "sc" && !c.is_supercharger) return false;
+    if (kind === "nosc" && c.is_supercharger) return false;
+    return true;
+  });
+}
+
+function typeBadge(c) {
+  if (c.is_supercharger) return '<span class="badge sc">Supercharger</span>';
+  if (c.is_fast_charger) return '<span class="badge fast">Rychlé DC</span>';
+  return '<span class="badge ac">AC</span>';
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, m =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* ---------- vykreslení ---------- */
+function render() {
+  const rows = visibleCharges();
+  $("results").hidden = false;
+
+  const added = rows.reduce((s, c) => s + (c.energy_added || 0), 0);
+  const used  = rows.reduce((s, c) => s + (c.energy_used || 0), 0);
+  const costs = rows.filter(c => typeof c.cost === "number");
+  const cost  = costs.reduce((s, c) => s + c.cost, 0);
+
+  $("kpiAdded").innerHTML = nf1.format(added) + " <small>kWh</small>";
+  $("kpiAddedD").textContent = "za " + rows.length + " nabíjení";
+  $("kpiUsed").innerHTML = nf1.format(used) + " <small>kWh</small>";
+  $("kpiCount").textContent = nf0.format(rows.length);
+  $("kpiCountD").textContent = rows.length ? "průměr " + nf1.format(added / rows.length) + " kWh" : "";
+  $("kpiCost").innerHTML = costs.length
+    ? nf2.format(cost) + " <small>(" + costs.length + "×)</small>"
+    : '<span class="muted">—</span>';
+  if (!costs.length) $("kpiCost").nextElementSibling.textContent = "Tessie cenu neuvádí";
+
+  // --- souhrn podle místa ---
+  const groups = new Map();
+  rows.forEach(c => {
+    const loc = c.location || "(neznámé místo)";
+    if (!groups.has(loc)) groups.set(loc, {n:0, added:0, used:0, cost:0, costN:0, sc:false, last:0});
+    const g = groups.get(loc);
+    g.n++; g.added += c.energy_added || 0; g.used += c.energy_used || 0;
+    if (typeof c.cost === "number") { g.cost += c.cost; g.costN++; }
+    if (c.is_supercharger) g.sc = true;
+    g.last = Math.max(g.last, c.started_at);
+  });
+  const summary = [...groups.entries()]
+    .map(([loc, g]) => ({loc, ...g}))
+    .sort((a, b) => b.added - a.added);
+  rawSummary = summary;
+
+  const tb = $("summary").querySelector("tbody");
+  tb.innerHTML = summary.map(g => `
+    <tr>
+      <td class="loc" title="${esc(g.loc)}">${esc(g.loc)} ${g.sc ? '<span class="badge sc">SC</span>' : ""}</td>
+      <td class="num">${g.n}</td>
+      <td class="num">${nf1.format(g.added)}</td>
+      <td class="num">${nf1.format(g.added / g.n)}</td>
+      <td class="num">${nf1.format(g.used)}</td>
+      <td class="num">${g.costN ? nf2.format(g.cost) : "—"}</td>
+    </tr>`).join("");
+  $("summary").querySelector("tfoot").innerHTML = summary.length ? `
+    <tr>
+      <td>Celkem</td>
+      <td class="num">${summary.reduce((s, g) => s + g.n, 0)}</td>
+      <td class="num">${nf1.format(summary.reduce((s, g) => s + g.added, 0))}</td>
+      <td class="num"></td>
+      <td class="num">${nf1.format(summary.reduce((s, g) => s + g.used, 0))}</td>
+      <td class="num">${nf2.format(summary.reduce((s, g) => s + g.cost, 0))}</td>
+    </tr>` : "";
+  $("summaryNote").textContent = summary.length
+    ? "Míst je " + summary.length + " — vyber konkrétní ve filtru výše."
+    : "";
+
+  // --- detail ---
+  $("detail").querySelector("tbody").innerHTML = rows.map(c => `
+    <tr>
+      <td>${dstr(c.started_at)}</td>
+      <td class="loc" title="${esc(c.location)}">${esc(c.location || "(neznámé)")}</td>
+      <td>${typeBadge(c)}</td>
+      <td class="num">${nf1.format(c.energy_added || 0)}</td>
+      <td class="num">${nf1.format(c.energy_used || 0)}</td>
+      <td class="num">${c.starting_battery}→${c.ending_battery}&nbsp;%</td>
+      <td class="num">${typeof c.cost === "number" ? nf2.format(c.cost) : "—"}</td>
+      <td class="num">${c.odometer != null ? nf0.format(c.odometer) : "—"}</td>
+    </tr>`).join("") || '<tr><td colspan="8" class="muted">Nic nenalezeno.</td></tr>';
+  $("detailNote").textContent = "řazeno od nejnovějšího";
+  $("exportInfo").textContent = rows.length
+    ? "Export se týká výběru: " + ($("place").value || "všechna místa") +
+      " · " + kindLabel() + " · " + rows.length + " nabíjení · " + nf1.format(added) + " kWh"
+    : "Nic k exportu — změň výběr.";
+}
+
+/* ---------- kniha jízd ---------- */
+const driveMinutes = d => Math.max(0, (d.ended_at - d.started_at) / 60);
+function fmtDur(mins) {
+  const h = Math.floor(mins / 60), m = Math.round(mins % 60);
+  return h ? h + " h " + m + " min" : m + " min";
+}
+
+function buildDriveFilters() {
+  const sel = $("dplace");
+  const prev = sel.value;
+  const counts = {};
+  allDrives.forEach(d => {
+    // místo se počítá, když je jízda startem i cílem (jen jednou)
+    new Set([d.starting_location, d.ending_location].filter(Boolean))
+      .forEach(l => { counts[l] = (counts[l] || 0) + 1; });
+  });
+  const places = Object.keys(counts)
+    .sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "cs"));
+  sel.innerHTML = '<option value="">Všechna místa</option>';
+  places.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = p + "  (" + counts[p] + "×)";
+    sel.appendChild(o);
+  });
+  if (places.includes(prev)) sel.value = prev;
+
+  const tsel = $("dtag");
+  const tprev = tsel.value;
+  const tags = {};
+  allDrives.forEach(d => {
+    const t = d.tag || "(bez štítku)";
+    tags[t] = (tags[t] || 0) + 1;
+  });
+  const tagList = Object.keys(tags).sort((a, b) => tags[b] - tags[a] || a.localeCompare(b, "cs"));
+  tsel.innerHTML = '<option value="">Všechny štítky</option>';
+  tagList.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t + "  (" + tags[t] + "×)";
+    tsel.appendChild(o);
+  });
+  if (tagList.includes(tprev)) tsel.value = tprev;
+}
+
+function visibleDrives() {
+  const place = $("dplace").value;
+  const tag = $("dtag").value;
+  return allDrives.filter(d => {
+    if (place && d.starting_location !== place && d.ending_location !== place) return false;
+    if (tag && (d.tag || "(bez štítku)") !== tag) return false;
+    return true;
+  });
+}
+
+function renderDrives() {
+  const rows = visibleDrives();
+  const dist = rows.reduce((s, d) => s + (d.odometer_distance || 0), 0);
+  const used = rows.reduce((s, d) => s + (d.energy_used || 0), 0);
+  const mins = rows.reduce((s, d) => s + driveMinutes(d), 0);
+
+  $("kpiDist").innerHTML = nf0.format(dist) + " <small>km</small>";
+  $("kpiDistD").textContent = rows.length ? "průměr " + nf0.format(dist / rows.length) + " km/jízda" : "";
+  $("kpiDriveUsed").innerHTML = nf1.format(used) + " <small>kWh</small>";
+  $("kpiDriveUsedD").textContent = rows.length && dist
+    ? nf1.format(used / dist * 100) + " kWh / 100 km"
+    : "";
+  $("kpiDriveCount").textContent = nf0.format(rows.length);
+  $("kpiDriveCountD").textContent = rows.length ? "výběr: " + fmtDur(mins) : "";
+  $("kpiDriveTime").innerHTML = nf1.format(mins / 60) + " <small>h</small>";
+
+  $("drivesExportInfo").textContent = rows.length
+    ? "Export se týká výběru: " + ($("dplace").value || "všechna místa") +
+      " · " + ($("dtag").value || "všechny štítky") + " · " + rows.length + " jízd · " +
+      nf0.format(dist) + " km"
+    : "Nic k exportu — změň výběr.";
+
+  $("drives").querySelector("tbody").innerHTML = rows.map(d => `
+    <tr>
+      <td>${dstr(d.started_at)}</td>
+      <td class="loc" title="${esc(d.starting_location)}">${esc(d.starting_location || "—")}</td>
+      <td class="loc" title="${esc(d.ending_location)}">${esc(d.ending_location || "—")}</td>
+      <td class="num">${nf1.format(d.odometer_distance || 0)}</td>
+      <td class="num">${nf1.format(d.energy_used || 0)}</td>
+      <td class="num">${d.average_speed != null ? nf0.format(d.average_speed) + " km/h" : "—"}</td>
+      <td class="num">${fmtDur(driveMinutes(d))}</td>
+      <td class="num">${d.starting_battery}→${d.ending_battery}&nbsp;%</td>
+      <td>${d.tag ? esc(d.tag) : '<span class="muted">—</span>'}</td>
+    </tr>`).join("") || '<tr><td colspan="9" class="muted">Nic nenalezeno.</td></tr>';
+}
+
+/* ---------- CSV ---------- */
+function download(name, text) {
+  const blob = new Blob(["\uFEFF" + text], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+const csvCell = v => {
+  const s = String(v == null ? "" : v);
+  return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const toCsv = (head, lines) => [head.map(csvCell).join(";")].concat(lines.map(r => r.map(csvCell).join(";"))).join("\r\n");
+
+function exportDetail() {
+  const rows = visibleCharges();
+  const csv = toCsv(
+    ["Datum", "Misto", "Typ", "Nabito kWh", "Spotreba kWh", "Baterie od %", "Baterie do %", "Naklady", "Odometr km"],
+    rows.map(c => [
+      dstr(c.started_at), c.location || "",
+      c.is_supercharger ? "Supercharger" : (c.is_fast_charger ? "Rychle DC" : "AC"),
+      (c.energy_added || 0).toFixed(2), (c.energy_used || 0).toFixed(2),
+      c.starting_battery, c.ending_battery,
+      typeof c.cost === "number" ? c.cost.toFixed(2) : "",
+      c.odometer != null ? Math.round(c.odometer) : ""
+    ])
+  );
+  download("tessie-nabijeni-detail.csv", csv);
+}
+function exportSummary() {
+  const csv = toCsv(
+    ["Misto", "Pocet nabijeni", "Nabito kWh", "Prumer kWh", "Spotreba kWh", "Naklady"],
+    rawSummary.map(g => [g.loc, g.n, g.added.toFixed(2), (g.added / g.n).toFixed(2), g.used.toFixed(2), g.costN ? g.cost.toFixed(2) : ""])
+  );
+  download("tessie-nabijeni-podle-mista.csv", csv);
+}
+
+/* ---------- export do Excelu (.xlsx) ---------- */
+function excelDate(ts) {
+  return new Date(ts * 1000);
+}
+
+function exportExcel() {
+  const rows = visibleCharges();
+  if (!rows.length) { setStatus($("detailNote"), "Nic k exportu — změň výběr.", "err"); return; }
+
+  if (typeof XLSX === "undefined") {
+    // CDN není k dispozici → záložní export přes CSV (otevře se v Excelu)
+    exportDetail();
+    setStatus($("detailNote"), "Knihovna Excelu se nenačetla — exportoval jsem aspoň CSV.", "info");
+    return;
+  }
+
+  // Jeden řádek = jedno nabíjení. Žádné součty — ty si v Excelu dopočítáš přes SUM.
+  const data = rows.map(c => [
+    excelDate(c.started_at),
+    excelDate(c.ended_at),
+    c.location || "",
+    c.is_supercharger ? "Supercharger" : (c.is_fast_charger ? "Rychlé DC" : "AC"),
+    c.energy_added || 0,
+    c.energy_used || 0,
+    c.starting_battery,
+    c.ending_battery,
+    typeof c.cost === "number" ? c.cost : "",
+    c.odometer != null ? Math.round(c.odometer) : ""
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([[
+    "Od", "Do", "Místo", "Typ", "Nabito kWh", "Spotřeba kWh",
+    "Baterie od %", "Baterie do %", "Náklady", "Odometr km"
+  ]].concat(data));
+  ws["!cols"] = [{wch:17},{wch:17},{wch:46},{wch:14},{wch:11},{wch:13},{wch:12},{wch:13},{wch:10},{wch:11}];
+
+  // formát data + čísla (desetinná čárka podle nastavení Excelu)
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    ["A","B"].forEach(col => {
+      const c = ws[col + (R + 1)];
+      // datum muze prijit jako bunka typu 'd' nebo jako cislo (serial)
+      if (c && (c.t === "d" || (c.t === "n" && c.v > 20000))) { c.t = c.t === "d" ? "d" : "n"; c.z = "DD.MM.YYYY HH:MM"; }
+    });
+    ["E","F","I"].forEach(col => {
+      const c = ws[col + (R + 1)];
+      if (c && typeof c.v === "number") c.z = "0.00";
+    });
+    const odo = ws["J" + (R + 1)];
+    if (odo && typeof odo.v === "number") odo.z = "# ##0";
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Nabíjení");
+
+  const fname = "tessie-nabijeni-" + $("from").value + "_" + $("to").value +
+    ($("place").value ? "-vyber" : "") + ".xlsx";
+  XLSX.writeFile(wb, fname);
+  setStatus($("detailNote"), "Excel uložen ✓ (" + rows.length + " řádků, bez součtů)", "ok");
+}
+
+/* ---------- export jízd ---------- */
+function exportDrivesCsv() {
+  const rows = visibleDrives();
+  if (!rows.length) { setStatus($("drivesNote"), "Nic k exportu — změň výběr.", "err"); return; }
+  const csv = toCsv(
+    ["Datum od", "Datum do", "Odkud", "Kam", "Vzdalenost km", "Spotreba kWh",
+     "Prumerna rychlost km/h", "Doba min", "Baterie od %", "Baterie do %", "Stitek"],
+    rows.map(d => [
+      dstr(d.started_at), dstr(d.ended_at),
+      d.starting_location || "", d.ending_location || "",
+      (d.odometer_distance || 0).toFixed(1), (d.energy_used || 0).toFixed(2),
+      d.average_speed != null ? d.average_speed : "",
+      Math.round(driveMinutes(d)),
+      d.starting_battery, d.ending_battery, d.tag || ""
+    ])
+  );
+  download("tessie-jizdy.csv", csv);
+  setStatus($("drivesNote"), "CSV uložen ✓ (" + rows.length + " řádků)", "ok");
+}
+
+function exportDrivesExcel() {
+  const rows = visibleDrives();
+  if (!rows.length) { setStatus($("drivesNote"), "Nic k exportu — změň výběr.", "err"); return; }
+
+  if (typeof XLSX === "undefined") {
+    exportDrivesCsv();
+    setStatus($("drivesNote"), "Knihovna Excelu se nenačetla — exportoval jsem aspoň CSV.", "info");
+    return;
+  }
+
+  // Jeden řádek = jedna jízda. Žádné součty — ty si v Excelu dopočítáš přes SUM.
+  const data = rows.map(d => [
+    excelDate(d.started_at),
+    excelDate(d.ended_at),
+    d.starting_location || "",
+    d.ending_location || "",
+    d.odometer_distance || 0,
+    d.energy_used || 0,
+    d.average_speed != null ? d.average_speed : "",
+    Math.round(driveMinutes(d)),
+    d.starting_battery,
+    d.ending_battery,
+    d.tag || ""
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([[
+    "Od", "Do", "Odkud", "Kam", "Vzdálenost km", "Spotřeba kWh",
+    "Prům. rychlost km/h", "Doba (min)", "Baterie od %", "Baterie do %", "Štítek"
+  ]].concat(data));
+  ws["!cols"] = [{wch:17},{wch:17},{wch:42},{wch:42},{wch:14},{wch:13},{wch:20},{wch:11},{wch:12},{wch:13},{wch:14}];
+
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    ["A","B"].forEach(col => {
+      const c = ws[col + (R + 1)];
+      if (c && (c.t === "d" || (c.t === "n" && c.v > 20000))) { c.t = c.t === "d" ? "d" : "n"; c.z = "DD.MM.YYYY HH:MM"; }
+    });
+    ["E","F"].forEach(col => {
+      const c = ws[col + (R + 1)];
+      if (c && typeof c.v === "number") c.z = "0.00";
+    });
+    const dur = ws["H" + (R + 1)];
+    if (dur && typeof dur.v === "number") dur.z = "0";
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Jízdy");
+
+  const fname = "tessie-jizdy-" + $("from").value + "_" + $("to").value +
+    ($("dplace").value ? "-vyber" : "") + ".xlsx";
+  XLSX.writeFile(wb, fname);
+  setStatus($("drivesNote"), "Excel uložen ✓ (" + rows.length + " řádků, bez součtů)", "ok");
+}
+
+/* ---------- události ---------- */
+$("saveToken").addEventListener("click", () => {
+  token = $("token").value.trim();
+  if (!token) { setStatus($("tokenStatus"), "Vlož token.", "err"); return; }
+  localStorage.setItem("tessie_token", token);
+  loadVehicles();
+});
+$("toggleToken").addEventListener("click", () => {
+  const t = $("token");
+  t.type = t.type === "password" ? "text" : "password";
+});
+$("load").addEventListener("click", load);
+$("place").addEventListener("change", render);
+$("kind").addEventListener("change", render);
+$("vehicle").addEventListener("change", () => { if (allCharges.length) load(); });
+document.querySelectorAll(".presets button").forEach(b =>
+  b.addEventListener("click", () => { preset(b.dataset.p); if (allCharges.length) load(); }));
+$("csvDetail").addEventListener("click", exportDetail);
+$("csvSummary").addEventListener("click", exportSummary);
+$("xlsx").addEventListener("click", exportExcel);
+$("dplace").addEventListener("change", renderDrives);
+$("dtag").addEventListener("change", renderDrives);
+$("xlsxDrives").addEventListener("click", exportDrivesExcel);
+$("csvDrives").addEventListener("click", exportDrivesCsv);
+
+/* ---------- start ---------- */
+preset("30");
+if (CFG_TOKEN) {
+  const p = document.querySelector("p.hint");
+  if (p) p.textContent = "Token se načítá automaticky z souboru config.js (leží vedle index.html a do " +
+    "GitHubu se nenahrává). Nový token = uprav tenhle soubor a ulož.";
+}
+if (token) {
+  $("token").value = token;
+  loadVehicles();
+}
+</script>
+</body>
+</html>
