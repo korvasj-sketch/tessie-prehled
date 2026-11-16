@@ -5,7 +5,11 @@ seřadí je podle adresy a spočítá spotřebu. Export do Excelu.
 
 ## Spouštění
 
-**Dvojklik na `index.html`** — otevře se v prohlížeči a funguje. Nic se nemusí instalovat.
+**Počítač — dvojklik na `index.html`** — otevře se v prohlížeči a funguje. Nic se nemusí instalovat.
+
+**Mobil / cizí počítač — webová adresa:**
+`https://korvasj-sketch.github.io/tessie-prehled/`
+(token se tam zadává jednou do prohlížeče, pak už ne)
 
 (Nebo přes server: `python -m http.server` → `http://127.0.0.1:8000/`.)
 
@@ -21,13 +25,18 @@ seřadí je podle adresy a spočítá spotřebu. Export do Excelu.
 `config.js` se **do GitHubu nenahrává** (hlídá ho `.gitignore`), takže token zůstane
 jen na tvém počítači. Změna tokenu = upravit tenhle soubor a uložit.
 
-## GitHub — soukromý repozitář (záloha kódu)
+## GitHub — repozitář a webová verze
 
-Repozitář: `https://github.com/korvasj-sketch/tessie-prehled` (**soukromý**).
+Repozitář: `https://github.com/korvasj-sketch/tessie-prehled`.
 Obsahuje jen `index.html`, `README.md`, `.gitignore` — žádný token.
 
-> Poznámka: GitHub Pages (webová adresa) neumí publikovat ze soukromého repozitáře
-> na Free plánu — proto se aplikace spouští dvojklikem.
+**Webová adresa (mobil):** `https://korvasj-sketch.github.io/tessie-prehled/`
+- repo je veřejné (jen kód, token v něm NENÍ), Pages ho publikuje automaticky
+- na mobilu se token zadá jednou a uloží se v prohlížeči telefonu
+- `config.js` se na GitHub nenahrává — na počítači ho používá jen lokální verze
+
+> Poznámka: GitHub Free umí Pages jen z veřejného repozitáře. Proto je rep veřejný —
+> kdo by adresu znal, bez tvého tokenu neuvidí žádná data.
 
 ### Odeslání změn do GitHubu
 
