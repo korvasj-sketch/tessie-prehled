@@ -67,7 +67,21 @@
   .muted{color:var(--muted)}
   footer{max-width:1100px; margin:0 auto; padding:0 20px 40px; color:var(--muted); font-size:13px}
   code{background:var(--panel2); padding:1px 6px; border-radius:6px; font-size:13px}
+  .pinput{width:92px; padding:6px 8px; text-align:right}
+  .legend{display:flex; gap:18px; align-items:center; font-size:13px; color:var(--muted); margin:2px 0 8px; flex-wrap:wrap}
+  .legend .lg{display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:6px; vertical-align:-2px}
+  .legend .kwh{background:#3fb950}
+  .legend .km{background:#58a6ff; height:3px; border-radius:2px}
+  #trend svg{width:100%; height:auto; display:block}
+  #map{height:480px; border:1px solid var(--line); border-radius:10px; z-index:0}
+  .leaflet-container{background:#0e1116!important; font:13px system-ui,-apple-system,"Segoe UI",sans-serif}
+  .leaflet-control-attribution{background:rgba(14,17,22,.85)!important; color:#8b98a5!important; font-size:11px}
+  .leaflet-control-attribution a{color:#58a6ff!important}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#1c232c; color:#e6edf3; box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  .leaflet-popup-content{margin:10px 14px; font-size:13px; line-height:1.45}
+  .leaflet-popup-close-button{color:#8b98a5!important}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 
@@ -149,12 +163,21 @@
       <div class="kpi">
         <div class="k">Náklady</div>
         <div class="v" id="kpiCost">–</div>
-        <div class="d">hodnota dle Tessie</div>
+        <div class="d" id="kpiCostD">zadej ceny Kč/kWh v sekci 3</div>
       </div>
     </div>
 
     <section class="card">
       <h2>3 · Souhrn podle místa</h2>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:0 1 260px">
+          <label>Výchozí cena Kč/kWh (když místo nemá vlastní)</label>
+          <input type="number" id="defaultPrice" min="0" step="0.01" placeholder="např. 7.50" style="width:100%">
+        </div>
+        <div style="flex:1 1 320px">
+          <p class="hint" style="margin:0 0 8px">Ceny zapiš přímo do tabulky — uloží se a příště zůstanou. Prázdné pole = výchozí cena.</p>
+        </div>
+      </div>
       <div class="tablewrap">
         <table id="summary">
           <thead>
@@ -164,7 +187,8 @@
               <th class="num">Nabito kWh</th>
               <th class="num">Průměr kWh</th>
               <th class="num">Spotřeba kWh</th>
-              <th class="num">Náklady</th>
+              <th class="num">Cena Kč/kWh</th>
+              <th class="num">Náklady Kč</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -264,6 +288,42 @@
         </table>
       </div>
     </section>
+
+    <section class="card">
+      <h2>6 · Vývoj po měsících</h2>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:0 1 260px">
+          <label>Zobrazit</label>
+          <select id="trendMetric">
+            <option value="kwh">Nabito kWh</option>
+            <option value="km">Ujeto km</option>
+            <option value="cost">Náklady Kč</option>
+            <option value="count">Počet nabíjení</option>
+          </select>
+        </div>
+        <div style="flex:1 1 300px">
+          <p class="hint" id="trendNote" style="margin:0 0 8px"></p>
+        </div>
+      </div>
+      <div id="trendChart" class="tablewrap"></div>
+    </section>
+
+    <section class="card">
+      <h2>7 · Mapa jízd</h2>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:0 1 260px">
+          <label>Zobrazit</label>
+          <select id="mapMode">
+            <option value="drives">Trasy jízd (start → cíl)</option>
+            <option value="places">Místa nabíjení</option>
+          </select>
+        </div>
+        <div style="flex:1 1 300px">
+          <p class="hint" id="mapNote" style="margin:0 0 8px">Tessie ukládá jen začátek a konec jízdy, takže trasy jsou rovné linky.</p>
+        </div>
+      </div>
+      <div id="map"></div>
+    </section>
   </div>
 
 </main>
@@ -278,6 +338,8 @@
 <script src="config.js"></script>
 <!-- knihovna pro generovani .xlsx (kdyby CDN chybela, export prepne na CSV) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- mapy (Leaflet + OpenStreetMap dlaždice) -->
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 "use strict";
 const API = "https://api.tessie.com";
@@ -297,6 +359,31 @@ let token = CFG_TOKEN || store.get("tessie_token") || "";
 let allCharges = [];      // všechna nabíjení z aktuálního načtení (období)
 let allDrives = [];       // všechny jízdy za stejné období
 let rawSummary = [];      // poslední vygenerovaný souhrn pro CSV
+
+/* ---------- ceny (ruční, Kč/kWh podle místa) ---------- */
+let prices = {};          // { místo: cena za kWh }
+let defaultPrice = null;  // výchozí cena pro místa bez vlastní ceny
+function loadPrices() {
+  try { prices = JSON.parse(store.get("tessie_prices") || "{}") || {}; } catch (e) { prices = {}; }
+  const dp = store.get("tessie_default_price");
+  defaultPrice = (dp !== null && dp !== "" && isFinite(parseFloat(dp))) ? parseFloat(dp) : null;
+}
+function savePrices() {
+  store.set("tessie_prices", JSON.stringify(prices));
+  store.set("tessie_default_price", defaultPrice == null ? "" : String(defaultPrice));
+}
+function priceOf(place) {
+  const p = prices[place];
+  if (typeof p === "number" && p > 0) return p;
+  return (defaultPrice != null && defaultPrice > 0) ? defaultPrice : null;
+}
+// cena nabíjení: ruční cena místa (nebo výchozí) × nabito kWh → jinak cena dle Tessie
+function costOf(c) {
+  const p = priceOf(c.location || "(neznámé místo)");
+  if (p != null) return (c.energy_added || 0) * p;
+  return typeof c.cost === "number" ? c.cost : null;
+}
+loadPrices();
 
 /* ---------- pomocné ---------- */
 const nf1 = new Intl.NumberFormat("cs-CZ", {minimumFractionDigits:1, maximumFractionDigits:1});
@@ -451,6 +538,8 @@ async function load() {
     buildDriveFilters();
     render();
     renderDrives();
+    renderTrend();
+    renderMap();
 
     const head = allCharges.length || allDrives.length
       ? "Hotovo ✓ " + allCharges.length + " nabíjení a " + allDrives.length + " jízd za období " +
@@ -521,18 +610,22 @@ function render() {
 
   const added = rows.reduce((s, c) => s + (c.energy_added || 0), 0);
   const used  = rows.reduce((s, c) => s + (c.energy_used || 0), 0);
-  const costs = rows.filter(c => typeof c.cost === "number");
-  const cost  = costs.reduce((s, c) => s + c.cost, 0);
+  // náklady: tvoje ruční ceny (místo → Kč/kWh), jinak cena dle Tessie
+  const costRows = rows.map(c => costOf(c)).filter(v => v != null);
+  const cost = costRows.reduce((s, v) => s + v, 0);
+  const priced = rows.filter(c => priceOf(c.location || "(neznámé místo)") != null).length;
 
   $("kpiAdded").innerHTML = nf1.format(added) + " <small>kWh</small>";
   $("kpiAddedD").textContent = "za " + rows.length + " nabíjení";
   $("kpiUsed").innerHTML = nf1.format(used) + " <small>kWh</small>";
   $("kpiCount").textContent = nf0.format(rows.length);
   $("kpiCountD").textContent = rows.length ? "průměr " + nf1.format(added / rows.length) + " kWh" : "";
-  $("kpiCost").innerHTML = costs.length
-    ? nf2.format(cost) + " <small>(" + costs.length + "×)</small>"
+  $("kpiCost").innerHTML = costRows.length
+    ? nf2.format(cost) + " <small>Kč</small>"
     : '<span class="muted">—</span>';
-  if (!costs.length) $("kpiCost").nextElementSibling.textContent = "Tessie cenu neuvádí";
+  $("kpiCostD").textContent = !rows.length ? ""
+    : priced ? "dle tvých cen (" + priced + "/" + rows.length + " nabíjení)"
+    : "zadej ceny Kč/kWh v sekci 3";
 
   // --- souhrn podle místa ---
   const groups = new Map();
@@ -541,7 +634,8 @@ function render() {
     if (!groups.has(loc)) groups.set(loc, {n:0, added:0, used:0, cost:0, costN:0, sc:false, last:0});
     const g = groups.get(loc);
     g.n++; g.added += c.energy_added || 0; g.used += c.energy_used || 0;
-    if (typeof c.cost === "number") { g.cost += c.cost; g.costN++; }
+    const cc = costOf(c);
+    if (cc != null) { g.cost += cc; g.costN++; }
     if (c.is_supercharger) g.sc = true;
     g.last = Math.max(g.last, c.started_at);
   });
@@ -551,15 +645,19 @@ function render() {
   rawSummary = summary;
 
   const tb = $("summary").querySelector("tbody");
-  tb.innerHTML = summary.map(g => `
+  tb.innerHTML = summary.map((g, i) => {
+    const p = priceOf(g.loc);
+    return `
     <tr>
       <td class="loc" title="${esc(g.loc)}">${esc(g.loc)} ${g.sc ? '<span class="badge sc">SC</span>' : ""}</td>
       <td class="num">${g.n}</td>
       <td class="num">${nf1.format(g.added)}</td>
       <td class="num">${nf1.format(g.added / g.n)}</td>
       <td class="num">${nf1.format(g.used)}</td>
-      <td class="num">${g.costN ? nf2.format(g.cost) : "—"}</td>
-    </tr>`).join("");
+      <td class="num"><input class="pinput" type="number" min="0" step="0.01" data-place="${esc(g.loc)}" value="${p != null ? p : ""}" placeholder="${defaultPrice != null ? nf2.format(defaultPrice) : "Kč/kWh"}" title="Cena za kWh pro tohle místo (ponech prázdné = výchozí cena)"></td>
+      <td class="num">${g.costN ? nf2.format(g.cost) : '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join("");
   $("summary").querySelector("tfoot").innerHTML = summary.length ? `
     <tr>
       <td>Celkem</td>
@@ -567,10 +665,11 @@ function render() {
       <td class="num">${nf1.format(summary.reduce((s, g) => s + g.added, 0))}</td>
       <td class="num"></td>
       <td class="num">${nf1.format(summary.reduce((s, g) => s + g.used, 0))}</td>
-      <td class="num">${nf2.format(summary.reduce((s, g) => s + g.cost, 0))}</td>
+      <td class="num"></td>
+      <td class="num">${nf2.format(summary.reduce((s, g) => s + g.cost, 0))} Kč</td>
     </tr>` : "";
   $("summaryNote").textContent = summary.length
-    ? "Míst je " + summary.length + " — vyber konkrétní ve filtru výše."
+    ? "Míst je " + summary.length + " — cenu Kč/kWh můžeš dopsat do sloupce, uloží se sama."
     : "";
 
   // --- detail ---
@@ -582,7 +681,7 @@ function render() {
       <td class="num">${nf1.format(c.energy_added || 0)}</td>
       <td class="num">${nf1.format(c.energy_used || 0)}</td>
       <td class="num">${c.starting_battery}→${c.ending_battery}&nbsp;%</td>
-      <td class="num">${typeof c.cost === "number" ? nf2.format(c.cost) : "—"}</td>
+      <td class="num">${costOf(c) != null ? nf2.format(costOf(c)) : "—"}</td>
       <td class="num">${c.odometer != null ? nf0.format(c.odometer) : "—"}</td>
     </tr>`).join("") || '<tr><td colspan="8" class="muted">Nic nenalezeno.</td></tr>';
   $("detailNote").textContent = "řazeno od nejnovějšího";
@@ -683,6 +782,176 @@ function renderDrives() {
     </tr>`).join("") || '<tr><td colspan="9" class="muted">Nic nenalezeno.</td></tr>';
 }
 
+/* ---------- ceny: ukládání po zadání ---------- */
+$("summary").addEventListener("change", e => {
+  const inp = e.target.closest("input.pinput");
+  if (!inp) return;
+  const place = inp.dataset.place;
+  const v = parseFloat(inp.value);
+  if (isFinite(v) && v >= 0 && inp.value !== "") prices[place] = v;
+  else delete prices[place];
+  savePrices();
+  render();           // přepočítat souhrn, KPI i detail
+});
+$("defaultPrice").addEventListener("change", () => {
+  const v = parseFloat($("defaultPrice").value);
+  defaultPrice = (isFinite(v) && v >= 0 && $("defaultPrice").value !== "") ? v : null;
+  savePrices();
+  render();
+});
+
+/* ---------- vývoj po měsících (graf) ---------- */
+function monthBuckets() {
+  // seskupí nabíjení i jízdy po kalendářních měsících načteného období
+  const map = new Map();
+  const key = ts => {
+    const d = new Date(ts * 1000);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  };
+  const ensure = k => {
+    if (!map.has(k)) map.set(k, {kwh: 0, km: 0, cost: 0, count: 0, drives: 0});
+    return map.get(k);
+  };
+  allCharges.forEach(c => {
+    const b = ensure(key(c.started_at));
+    b.kwh += c.energy_added || 0;
+    b.count++;
+    const cc = costOf(c);
+    if (cc != null) b.cost += cc;
+  });
+  allDrives.forEach(d => { ensure(key(d.started_at)).km += d.odometer_distance || 0; });
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function renderTrend() {
+  const el = $("trendChart");
+  const metric = $("trendMetric").value;
+  const buckets = monthBuckets();
+  if (!buckets.length) { el.innerHTML = '<p class="muted">Nejdřív načti data.</p>'; $("trendNote").textContent = ""; return; }
+
+  const cfg = {
+    kwh:  {label: "Nabito kWh",   fmt: v => nf1.format(v) + " kWh", color: "#3fb950", get: b => b.kwh},
+    km:   {label: "Ujeto km",     fmt: v => nf0.format(v) + " km",  color: "#58a6ff", get: b => b.km},
+    cost: {label: "Náklady Kč",   fmt: v => nf2.format(v) + " Kč",  color: "#d29922", get: b => b.cost},
+    count:{label: "Počet nabíjení", fmt: v => nf0.format(v) + "×",  color: "#bc8cff", get: b => b.count}
+  }[metric];
+
+  const vals = buckets.map(b => cfg.get(b[1]));
+  const max = Math.max.apply(null, vals.concat([1]));
+  const total = vals.reduce((s, v) => s + v, 0);
+
+  const W = 1000, H = 300, padL = 56, padR = 16, padT = 18, padB = 46;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const bw = Math.min(64, iw / buckets.length * 0.65);
+  const step = iw / buckets.length;
+  const x = i => padL + step * i + step / 2;
+  const y = v => padT + ih - (v / max) * ih;
+
+  const monthName = k => {
+    const m = ["led", "úno", "bře", "dub", "kvě", "čvn", "čvc", "srp", "zář", "říj", "lis", "pro"][parseInt(k.slice(5), 10) - 1];
+    return m + " " + k.slice(2, 4);
+  };
+
+  // vodorovné čáry + popisky osy Y
+  let grid = "", ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const v = max * i / ticks, yy = y(v);
+    grid += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy + '" stroke="#2a3340"/>' +
+      '<text x="' + (padL - 8) + '" y="' + (yy + 4) + '" text-anchor="end" fill="#8b98a5" font-size="11">' +
+      (max >= 100 ? nf0.format(v) : nf1.format(v)) + '</text>';
+  }
+
+  const bars = buckets.map((b, i) => {
+    const v = vals[i], h = Math.max(1, (v / max) * ih);
+    return '<rect x="' + (x(i) - bw / 2) + '" y="' + (padT + ih - h) + '" width="' + bw + '" height="' + h +
+      '" rx="4" fill="' + cfg.color + '" opacity=".85"><title>' + monthName(b[0]) + ': ' + cfg.fmt(v) + '</title></rect>' +
+      '<text x="' + x(i) + '" y="' + (H - 24) + '" text-anchor="middle" fill="#8b98a5" font-size="11">' + monthName(b[0]) + '</text>' +
+      (v > 0 ? '<text x="' + x(i) + '" y="' + (padT + ih - h - 6) + '" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">' +
+        (max >= 1000 ? nf0.format(v) : nf1.format(v)) + '</text>' : "");
+  }).join("");
+
+  el.innerHTML =
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%; height:auto" role="img" aria-label="Vývoj po měsících">' +
+    grid + bars +
+    '<line x1="' + padL + '" y1="' + (padT + ih) + '" x2="' + (W - padR) + '" y2="' + (padT + ih) + '" stroke="#2a3340"/>' +
+    '</svg>';
+
+  $("trendNote").textContent = cfg.label + " — celkem " + cfg.fmt(total) +
+    " za " + buckets.length + " měsíců (z načteného období).";
+}
+
+/* ---------- mapa ---------- */
+let map = null, mapLayers = null;
+
+function renderMap() {
+  if (typeof L === "undefined") {
+    $("map").innerHTML = '<p class="err">Mapová knihovna se nenačetla (chybí připojení k CDN) — zbytek aplikace funguje.</p>';
+    return;
+  }
+  if (!map) {
+    map = L.map("map", {scrollWheelZoom: true}).setView([49.7, 13.4], 8);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    mapLayers = L.layerGroup().addTo(map);
+  }
+  map.invalidateSize();     // sekce mohla být předtím skrytá
+  mapLayers.clearLayers();
+
+  const mode = $("mapMode").value;
+  const pts = [];
+
+  if (mode === "drives") {
+    const rows = visibleDrives();
+    rows.forEach(d => {
+      if (d.starting_latitude == null || d.ending_latitude == null) return;
+      const a = [d.starting_latitude, d.starting_longitude];
+      const b = [d.ending_latitude, d.ending_longitude];
+      pts.push(a, b);
+      L.polyline([a, b], {color: "#58a6ff", weight: 2, opacity: .55})
+        .bindTooltip(dstr(d.started_at) + "<br>" + esc(d.starting_location || "?") + " → " + esc(d.ending_location || "?") +
+          "<br>" + nf1.format(d.odometer_distance || 0) + " km · " + nf1.format(d.energy_used || 0) + " kWh")
+        .addTo(mapLayers);
+      L.circleMarker(a, {radius: 4, color: "#3fb950", fillOpacity: .9}).bindTooltip("Start: " + esc(d.starting_location || "?")).addTo(mapLayers);
+      L.circleMarker(b, {radius: 4, color: "#f85149", fillOpacity: .9}).bindTooltip("Cíl: " + esc(d.ending_location || "?")).addTo(mapLayers);
+    });
+    $("mapNote").textContent = rows.length
+      ? rows.length + " jízd · Tessie ukládá jen začátek a konec, takže trasy jsou rovné linky (zelená = start, červená = cíl)."
+      : "Žádné jízdy k zobrazení.";
+  } else {
+    // místa nabíjení: souřadnice z nabíjení, sloučená podle adresy
+    const groups = new Map();
+    visibleCharges().forEach(c => {
+      if (c.latitude == null || c.longitude == null) return;
+      const loc = c.location || "(neznámé místo)";
+      if (!groups.has(loc)) groups.set(loc, {lat: 0, lon: 0, n: 0, kwh: 0, cost: 0, first: true});
+      const g = groups.get(loc);
+      if (g.first) { g.lat = c.latitude; g.lon = c.longitude; g.first = false; }
+      g.n++; g.kwh += c.energy_added || 0;
+      const cc = costOf(c);
+      if (cc != null) g.cost += cc;
+    });
+    groups.forEach((g, loc) => {
+      const p = [g.lat, g.lon];
+      pts.push(p);
+      const price = priceOf(loc);
+      L.circleMarker(p, {
+        radius: Math.min(18, 7 + Math.sqrt(g.n) * 2.2),
+        color: "#d29922", weight: 2, fillOpacity: .35
+      }).bindTooltip("<b>" + esc(loc) + "</b><br>" + g.n + " nabíjení · " + nf1.format(g.kwh) + " kWh<br>" +
+        (price != null ? nf2.format(price) + " Kč/kWh · " : "") + nf2.format(g.cost) + " Kč")
+        .addTo(mapLayers);
+    });
+    $("mapNote").textContent = groups.size
+      ? groups.size + " míst nabíjení (velikost kruhu = počet nabíjení, žlutá = cena dle tvých zadání)."
+      : "Žádná místa k zobrazení.";
+  }
+
+  if (pts.length) map.fitBounds(L.latLngBounds(pts), {padding: [30, 30]});
+  else map.setView([49.7, 13.4], 8);
+}
+
 /* ---------- CSV ---------- */
 function download(name, text) {
   const blob = new Blob(["\uFEFF" + text], {type: "text/csv;charset=utf-8"});
@@ -701,13 +970,13 @@ const toCsv = (head, lines) => [head.map(csvCell).join(";")].concat(lines.map(r 
 function exportDetail() {
   const rows = visibleCharges();
   const csv = toCsv(
-    ["Datum", "Misto", "Typ", "Nabito kWh", "Spotreba kWh", "Baterie od %", "Baterie do %", "Naklady", "Odometr km"],
+    ["Datum", "Misto", "Typ", "Nabito kWh", "Spotreba kWh", "Baterie od %", "Baterie do %", "Naklady Kc", "Odometr km"],
     rows.map(c => [
       dstr(c.started_at), c.location || "",
       c.is_supercharger ? "Supercharger" : (c.is_fast_charger ? "Rychle DC" : "AC"),
       (c.energy_added || 0).toFixed(2), (c.energy_used || 0).toFixed(2),
       c.starting_battery, c.ending_battery,
-      typeof c.cost === "number" ? c.cost.toFixed(2) : "",
+      costOf(c) != null ? costOf(c).toFixed(2) : "",
       c.odometer != null ? Math.round(c.odometer) : ""
     ])
   );
@@ -715,7 +984,7 @@ function exportDetail() {
 }
 function exportSummary() {
   const csv = toCsv(
-    ["Misto", "Pocet nabijeni", "Nabito kWh", "Prumer kWh", "Spotreba kWh", "Naklady"],
+    ["Misto", "Pocet nabijeni", "Nabito kWh", "Prumer kWh", "Spotreba kWh", "Naklady Kc"],
     rawSummary.map(g => [g.loc, g.n, g.added.toFixed(2), (g.added / g.n).toFixed(2), g.used.toFixed(2), g.costN ? g.cost.toFixed(2) : ""])
   );
   download("tessie-nabijeni-podle-mista.csv", csv);
@@ -747,13 +1016,13 @@ function exportExcel() {
     c.energy_used || 0,
     c.starting_battery,
     c.ending_battery,
-    typeof c.cost === "number" ? c.cost : "",
+    costOf(c) != null ? costOf(c) : "",
     c.odometer != null ? Math.round(c.odometer) : ""
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([[
     "Od", "Do", "Místo", "Typ", "Nabito kWh", "Spotřeba kWh",
-    "Baterie od %", "Baterie do %", "Náklady", "Odometr km"
+    "Baterie od %", "Baterie do %", "Náklady Kč", "Odometr km"
   ]].concat(data));
   ws["!cols"] = [{wch:17},{wch:17},{wch:46},{wch:14},{wch:11},{wch:13},{wch:12},{wch:13},{wch:10},{wch:11}];
 
@@ -880,9 +1149,15 @@ $("dplace").addEventListener("change", renderDrives);
 $("dtag").addEventListener("change", renderDrives);
 $("xlsxDrives").addEventListener("click", exportDrivesExcel);
 $("csvDrives").addEventListener("click", exportDrivesCsv);
+$("trendMetric").addEventListener("change", renderTrend);
+$("mapMode").addEventListener("change", renderMap);
+// změna filtrů má překreslit i mapu (graf je za celé období)
+$("place").addEventListener("change", () => { if (map) renderMap(); });
+$("dplace").addEventListener("change", () => { if (map) renderMap(); });
 
 /* ---------- start ---------- */
 preset("30");
+if (defaultPrice != null) $("defaultPrice").value = defaultPrice;
 if (CFG_TOKEN) {
   const p = document.querySelector("p.hint");
   if (p) p.textContent = "Token se načítá automaticky z souboru config.js (leží vedle index.html a do " +

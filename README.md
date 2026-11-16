@@ -44,12 +44,17 @@ git push
 - **Nabíjení**
   - filtr podle **místa nabíjení** (adresa + počet nabíjení) a typu (Supercharger / rychlé DC / AC)
   - souhrn podle místa: počet nabíjení, nabito kWh, průměr, spotřeba, náklady
-  - detail každého nabíjení (časy, baterie %, odometr)
+  - **vlastní ceny** — do sloupce *Cena Kč/kWh* zapiš cenu pro dané místo (nebo *výchozí cenu*
+    nad tabulkou); náklady se přepočítají v KPI, souhrnu, detailu i exportu a **uloží se samy**
+  - detail každého nabíjení (časy, baterie %, odometr, náklady)
 - **Kniha jízd**
   - filtr podle **místa (start nebo cíl)** a štítku jízdy
   - KPI: ujetá vzdálenost, spotřeba (kWh a na 100 km), počet jízd, čas za volantem
   - každá jízda zvlášť: odkud → kam, km, kWh, průměrná rychlost, doba, baterie
-- **Export do Excelu (.xlsx)** — obě sekce tlačítkem; vždy jen samostatné řádky
+- **Vývoj po měsících** — sloupcový graf (kWh / km / Kč / počet nabíjení) za načtené období
+- **Mapa jízd** (Leaflet + OpenStreetMap) — trasy start → cíl nebo místa nabíjení
+  (Tessie ukládá jen začátek a konec jízdy, takže trasy jsou rovné linky)
+- **Export do Excelu (.xlsx)** — všechny sekce tlačítkem; vždy jen samostatné řádky
   **bez součtů** (součty si dopočítáš v Excelu přes `SUM`), data ve formátu
   `DD.MM.YYYY HH:MM`, čísla jako čísla (jde sčítat)
 - záložní export CSV (detail i souhrn) — otevře se v Excelu (česká diakritika)
