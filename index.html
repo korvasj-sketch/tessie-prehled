@@ -311,11 +311,20 @@
     <section class="card">
       <h2>7 · Mapa jízd</h2>
       <div class="row" style="align-items:flex-end">
-        <div style="flex:0 1 260px">
+        <div style="flex:0 1 240px">
           <label>Zobrazit</label>
           <select id="mapMode">
             <option value="drives">Trasy jízd (start → cíl)</option>
             <option value="places">Místa nabíjení</option>
+          </select>
+        </div>
+        <div style="flex:0 1 240px">
+          <label>Podklad mapy</label>
+          <select id="mapBase">
+            <option value="dark">Tmavá</option>
+            <option value="aerial">Letecká (satelit)</option>
+            <option value="hybrid">Letecká + popisy</option>
+            <option value="topo">Topografická</option>
           </select>
         </div>
         <div style="flex:1 1 300px">
@@ -881,7 +890,42 @@ function renderTrend() {
 }
 
 /* ---------- mapa ---------- */
-let map = null, mapLayers = null;
+let map = null, mapLayers = null, baseLayer = null;
+
+// podklady Esri (volné, bez klíče); OSM tile server blokuje stránky z file://
+const MAP_BASES = {
+  dark: {
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
+  },
+  aerial: {
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, HERE, Garmin, FAO, NOAA, USGS'
+  },
+  hybrid: {
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 19,
+    overlay: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+    attribution: 'Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, HERE, Garmin, FAO, NOAA, USGS'
+  },
+  topo: {
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
+  }
+};
+
+function setMapBase(key) {
+  if (!map) return;
+  const b = MAP_BASES[key] || MAP_BASES.dark;
+  if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
+  if (map._esriOverlay) { map.removeLayer(map._esriOverlay); map._esriOverlay = null; }
+  baseLayer = L.tileLayer(b.url, {maxZoom: b.maxZoom, attribution: b.attribution}).addTo(map);
+  if (b.overlay) map._esriOverlay = L.tileLayer(b.overlay, {maxZoom: b.maxZoom}).addTo(map);
+  store.set("tessie_mapbase", key);
+}
 
 function renderMap() {
   if (typeof L === "undefined") {
@@ -890,11 +934,7 @@ function renderMap() {
   }
   if (!map) {
     map = L.map("map", {scrollWheelZoom: true}).setView([49.7, 13.4], 8);
-    // Esri Dark Gray Canvas — volné, bez klíče a bez watermarku; OSM dlaždice blokují file://
-    L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-      maxZoom: 16,
-      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
-    }).addTo(map);
+    setMapBase($("mapBase").value);
     mapLayers = L.layerGroup().addTo(map);
   }
   map.invalidateSize();     // sekce mohla být předtím skrytá
@@ -1152,6 +1192,10 @@ $("xlsxDrives").addEventListener("click", exportDrivesExcel);
 $("csvDrives").addEventListener("click", exportDrivesCsv);
 $("trendMetric").addEventListener("change", renderTrend);
 $("mapMode").addEventListener("change", renderMap);
+$("mapBase").addEventListener("change", () => {
+  store.set("tessie_mapbase", $("mapBase").value);
+  setMapBase($("mapBase").value);
+});
 // změna filtrů má překreslit i mapu (graf je za celé období)
 $("place").addEventListener("change", () => { if (map) renderMap(); });
 $("dplace").addEventListener("change", () => { if (map) renderMap(); });
@@ -1159,6 +1203,8 @@ $("dplace").addEventListener("change", () => { if (map) renderMap(); });
 /* ---------- start ---------- */
 preset("30");
 if (defaultPrice != null) $("defaultPrice").value = defaultPrice;
+const savedBase = store.get("tessie_mapbase");
+if (savedBase && MAP_BASES[savedBase]) $("mapBase").value = savedBase;
 if (CFG_TOKEN) {
   const p = document.querySelector("p.hint");
   if (p) p.textContent = "Token se načítá automaticky z souboru config.js (leží vedle index.html a do " +
