@@ -890,9 +890,10 @@ function renderMap() {
   }
   if (!map) {
     map = L.map("map", {scrollWheelZoom: true}).setView([49.7, 13.4], 8);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    // Esri Dark Gray Canvas — volné, bez klíče a bez watermarku; OSM dlaždice blokují file://
+    L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 16,
+      attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
     }).addTo(map);
     mapLayers = L.layerGroup().addTo(map);
   }
