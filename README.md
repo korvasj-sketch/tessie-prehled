@@ -1,29 +1,42 @@
-# Tessie — přehled nabíjení
+# Tessie — přehled nabíjení a kniha jízd
 
-Webová aplikace (bez serveru): vytáhne z Tessie API nabíjení za vybrané období,
-seřadí je podle místa a spočítá, kolik kWh jsi nabil (a za kolik).
+Webová aplikace (bez serveru): vytáhne z Tessie API nabíjení i jízdy za vybrané období,
+seřadí je podle adresy a spočítá spotřebu. Export do Excelu.
 
-## Spuštění lokálně
+## Spouštění
 
-Stačí otevřít `index.html` v prohlížeči. (Nebo přes server: `python -m http.server`.)
+**Dvojklik na `index.html`** — otevře se v prohlížeči a funguje. Nic se nemusí instalovat.
 
-## Nasazení na GitHub Pages (zdarma)
+(Nebo přes server: `python -m http.server` → `http://127.0.0.1:8000/`.)
 
-1. Na **github.com** → **New repository** (např. `tessie-prehled`) → zaškrtni **Public** → **Create repository**.
-2. Klikni **uploading an existing file** → přetáhni `index.html` → **Commit changes**.
-3. V repozitáři **Settings → Pages** → v sekci **Build and deployment**:
-   - Source: **Deploy from a branch**
-   - Branch: **main**, složka: **/ (root)** → **Save**.
-4. Za minutu je stránka na adrese:
-   `https://<tvuj-uzivatel>.github.io/tessie-prehled/`
-   (adresa je i v Settings → Pages.)
+## Token (nemusíš ho psát pokaždé)
 
-## Token
+1. V Tessie: **Developer settings → Generate Access Token**.
+2. Vlož ho do souboru **`config.js`** (leží vedle `index.html`):
+   ```js
+   window.TESSIE_CONFIG = { token: "TVOJ_TOKEN" };
+   ```
+3. Hotovo — aplikace si ho při každém spuštění přečte sama.
 
-- V Tessie: **Developer settings → Generate Access Token**.
-- Token se vkládá do aplikace a ukládá **jen do tvého prohlížeče** (localStorage) —
-  nikdy se nepíše do kódu ani do repozitáře (repo je veřejné!).
-- Kdykoliv ho můžeš v Tessie vygenerovat znovu.
+`config.js` se **do GitHubu nenahrává** (hlídá ho `.gitignore`), takže token zůstane
+jen na tvém počítači. Změna tokenu = upravit tenhle soubor a uložit.
+
+## GitHub — soukromý repozitář (záloha kódu)
+
+Repozitář: `https://github.com/korvasj-sketch/tessie-prehled` (**soukromý**).
+Obsahuje jen `index.html`, `README.md`, `.gitignore` — žádný token.
+
+> Poznámka: GitHub Pages (webová adresa) neumí publikovat ze soukromého repozitáře
+> na Free plánu — proto se aplikace spouští dvojklikem.
+
+### Odeslání změn do GitHubu
+
+```powershell
+cd C:\Users\korva\Desktop\TessiePrehled
+git add -A
+git commit -m "popis změny"
+git push
+```
 
 ## Co umí
 
@@ -40,3 +53,10 @@ Stačí otevřít `index.html` v prohlížeči. (Nebo přes server: `python -m h
   **bez součtů** (součty si dopočítáš v Excelu přes `SUM`), data ve formátu
   `DD.MM.YYYY HH:MM`, čísla jako čísla (jde sčítat)
 - záložní export CSV (detail i souhrn) — otevře se v Excelu (česká diakritika)
+
+## Bezpečnost
+
+- token nikdy není v kódu ani v repozitáři — jen v `config.js` (lokálně) nebo
+  v localStorage prohlížeče
+- všechny požadavky chodí přímo z tvého prohlížeče na `api.tessie.com`,
+  nikam jinam se nic neodesílá
